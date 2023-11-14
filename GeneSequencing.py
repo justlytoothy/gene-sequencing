@@ -13,7 +13,7 @@ else:
 
 import random
 
-# Used to compute the bandwidth for banded version
+# Used to compute the 3 for banded version
 MAXINDELS = 3
 
 # Used to implement Needleman-Wunsch scoring
@@ -68,7 +68,70 @@ class GeneSequencing:
         return {'align_cost': score, 'seqi_first100': alignment1, 'seqj_first100': alignment2}
 
     def banded_alignment(self, seq1, seq2):
-        pass
+        # Initialize the arr
+        back_map = {}
+        dp_map = {}
+        len_one = min(self.MaxCharactersToAlign, len(seq1))
+        len_two = min(self.MaxCharactersToAlign, len(seq2))
+        self.alignedSeq1 = ""
+        self.alignedSeq2 = ""
+        if abs(len_one - len_two) > MAXINDELS:
+            self.alignedSeq1 = "No Alignment Possible."
+            self.alignedSeq1 = "No Alignment Possible."
+            self.optimalScore = float('inf')
+            return
+        # Constant time because will only loop for the number of MAXINDELS + 1 which is constant
+        for i in range(0, MAXINDELS + 1):
+            dp_map[(i, 0)] = i * INDEL
+            if (i - 1, 0) in back_map:
+                back_map[(i, 0)] = (i - 1, 0)
+            else:
+                back_map[(i, 0)] = None
+        # Constant time because will only loop for the number of MAXINDELS + 1 which is constant
+        for i in range(0, MAXINDELS + 1):
+            dp_map[(0, i)] = i * INDEL
+            if (0, i - 1) in back_map:
+                back_map[(0, i)] = (0, i - 1)
+            else:
+                back_map[(0, i)] = None
+        for i in range(1, len_one + 1):
+            x = i - 1
+            for j in range(i - MAXINDELS, i + 1 + MAXINDELS):
+                y = j - 1
+                one, two, three = float('inf'), float('inf'), float('inf')
+                if 0 < j < len_two + 1:
+                    if (x, y) in dp_map:
+                        one = (MATCH if seq1[x] == seq2[y] else SUB) + dp_map[(x, y)]
+                    if (i, y) in dp_map:
+                        two = INDEL + dp_map[(i, y)]
+                    if (x, j) in dp_map:
+                        three = INDEL + dp_map[(x, j)]
+                    min_val = min(one, two, three)
+                    if two == min_val:
+                        back_map[(i, j)] = (i, y)
+                    elif three == min_val:
+                        back_map[(i, j)] = (x, j)
+                    else:
+                        back_map[(i, j)] = (x, y)
+                    dp_map[(i, j)] = min_val
+        curr = (len_one, len_two)
+        prev = back_map[curr]
+        # O(n) time, n is size of the back_map
+        while prev is not None:
+            if prev == (curr[0], curr[1] - 1):
+                self.alignedSeq1 = "-" + self.alignedSeq1
+                self.alignedSeq2 = seq2[curr[1] - 1] + self.alignedSeq2
+            elif prev == (curr[0] - 1, curr[1]):
+                self.alignedSeq1 = seq1[curr[0] - 1] + self.alignedSeq1
+                self.alignedSeq2 = "-" + self.alignedSeq2
+            elif prev == (curr[0] - 1, curr[1] - 1):
+                self.alignedSeq1 = seq1[curr[0] - 1] + self.alignedSeq1
+                self.alignedSeq2 = seq2[curr[1] - 1] + self.alignedSeq2
+            curr = prev
+            prev = back_map[curr]
+        self.alignedSeq1 = self.alignedSeq1[:100]
+        self.alignedSeq2 = self.alignedSeq2[:100]
+        self.optimalScore = dp_map[(len_one, len_two)]
 
     def unbanded_alignment(self, seq1, seq2):
         # i is word on left, j is word on top
@@ -76,65 +139,45 @@ class GeneSequencing:
         len_two = min(self.MaxCharactersToAlign, len(seq2))
         self.alignedSeq1 = ""
         self.alignedSeq2 = ""
-        arr = [[(0, 0, 0) for i in range(len_two + 1)] for j in range(len_one + 1)]
-        curr = 0
-
-        prev = 0
+        back_map = {}
+        arr = [[0 for i in range(len_two + 1)] for j in range(len_one + 1)]
         for i in range(len_one + 1):
-            arr[i][0] = (prev, 0, curr)
-            prev = i
-            curr += 5
-        curr = 0
-        prev = 0
+            arr[i][0] = i * INDEL
+            back_map[(i, 0)] = 'top'
         for i in range(len_two + 1):
-            arr[0][i] = (0, prev, curr)
-            prev = i
-            curr += 5
+            arr[0][i] = i * INDEL
+            back_map[(0, i)] = 'left'
         for i in range(1, len_one + 1):
             x = i - 1
             for j in range(1, len_two + 1):
                 y = j - 1
-                one = (-3 if seq1[x] == seq2[y] else 1) + arr[i - 1][j - 1][2]
-                two = 5 + arr[i][j - 1][2]
-                three = 5 + arr[i - 1][j][2]
+                one = (MATCH if seq1[x] == seq2[y] else SUB) + arr[x][y]
+                two = INDEL + arr[i][y]
+                three = INDEL + arr[x][j]
                 min_val = min(one, two, three)
-                if one == min_val:
-                    val = (i - 1, j - 1, min_val)
-                elif two == min_val:
-                    val = (i, j - 1, min_val)
+                arr[i][j] = min_val
+                if two == min_val:
+                    back_map[(i, j)] = 'left'
+                elif three == min_val:
+                    back_map[(i, j)] = 'top'
                 else:
-                    val = (i - 1, j, min_val)
-                arr[i][j] = val
-        curr = arr[len_one][len_two]
-        i, j = len_one - 1, len_two - 1
-        while i >= 0 or j >= 0:
-            next_val = arr[curr[0]][curr[1]]
-            same_x = next_val[0] == curr[0]
-            same_y = next_val[1] == curr[1]
-            if same_x and same_y:
-                self.alignedSeq1 = seq1[i] + self.alignedSeq1
-                self.alignedSeq2 = seq2[j] + self.alignedSeq2
-                # if i >= 0:
-                #     self.alignedSeq1 = seq1[i] + self.alignedSeq1
-                # else:
-                #     self.alignedSeq1 = '-' + self.alignedSeq1
-                # if j >= 0:
-                #     self.alignedSeq2 = seq2[j] + self.alignedSeq2
-                # else:
-                #     self.alignedSeq2 = '-' + self.alignedSeq2
+                    back_map[(i, j)] = 'diagonal'
+
+        i, j = len_one, len_two
+        while i > 0 or j > 0:
+            if back_map[(i, j)] == 'diagonal':
+                self.alignedSeq1 = seq1[i - 1] + self.alignedSeq1
+                self.alignedSeq2 = seq2[j - 1] + self.alignedSeq2
                 i -= 1
                 j -= 1
-            elif same_y:
-                self.alignedSeq1 = seq1[i] + self.alignedSeq1
-                # if i >= 0:
-                #     self.alignedSeq1 = seq1[i] + self.alignedSeq1
-                # else:
-                #     self.alignedSeq1 = '-' + self.alignedSeq1
+            elif back_map[(i, j)] == 'top':
+                self.alignedSeq1 = seq1[i - 1] + self.alignedSeq1
                 self.alignedSeq2 = '-' + self.alignedSeq2
                 i -= 1
-            elif same_x:
+            else:
                 self.alignedSeq1 = '-' + self.alignedSeq1
-                self.alignedSeq2 = seq2[j] + self.alignedSeq2
+                self.alignedSeq2 = seq2[j - 1] + self.alignedSeq2
                 j -= 1
-            curr = next_val
-        self.optimalScore = arr[len_one][len_two][2]
+        self.alignedSeq1 = self.alignedSeq1[:100]
+        self.alignedSeq2 = self.alignedSeq2[:100]
+        self.optimalScore = arr[len_one][len_two]
